@@ -6,9 +6,8 @@ const mangayomiSources = [
         apiUrl: "",
         iconUrl: "https://raw.githubusercontent.com/qyshdush018-lgtm/kosovo-tv-mangayomi/main/images/kosovo_tv.png",
         typeSource: "single",
-        itemType: 1,
-        version: "1.0.0",
-        pkgName: "kosovo_tv/KosovoTV.js",
+        itemType: "anime",
+        version: 1,
         pkgPath: "kosovo_tv/KosovoTV.js"
     }
 ];
