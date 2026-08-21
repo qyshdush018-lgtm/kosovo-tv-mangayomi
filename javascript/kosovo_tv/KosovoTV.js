@@ -1,526 +1,138 @@
-const mangayomiSources = [
-    {
-        "name": "Kosovo TV",
-        "lang": "en",
-        "typeSource": "single",
-        "version": "1.0.0",
-        "pkgPath": "kosovo_tv",
-        "pkgName": "KosovoTV",
-        "iconUrl": "https://raw.githubusercontent.com/qyshdush018-lgtm/kosovo-tv-mangayomi/main/images/kosovo_tv.png",
-        "itemType": 1
-    }
-];
-
-
 class DefaultExtension extends MProvider {
-
     #client;
 
     get client() {
         return this.#client ??= new Client();
     }
 
-
     // ============================================================
-    // STATIC CHANNEL DATABASE
+    // CHANNEL METADATA
     //
-    // These are FALLBACK streams.
+    // We keep the REAL stream URL and attach metadata after "#".
     //
-    // IPTV-org is checked dynamically when a channel is played.
+    // Example:
+    //
+    // https://example.com/live/index.m3u8#MANGO_NAME=RTK%201&MANGO_LOGO=https%3A...
+    //
+    // The fragment is NOT sent to the streaming server.
     // ============================================================
 
-    getChannelDatabase() {
+    createChannelUrl(name, logo, stream) {
+        const encodedName =
+            encodeURIComponent(name || "");
 
-        return [
+        const encodedLogo =
+            encodeURIComponent(logo || "");
 
-            {
-                name: "RTV 21",
-                logo: "https://i.imgur.com/AqQltGh.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live/2cz-npl-jfn-9he/index.m3u8"
-            },
-
-            {
-                name: "KTV / Kohavision",
-                logo: "https://i.imgur.com/LOi9yma.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-livestream/lj9-pxm-o53-rp0/index.m3u8"
-            },
-
-            {
-                name: "RTK 1",
-                logo: "https://i.imgur.com/KTcWcO6.png",
-                stream:
-                    "https://gjvideo-live-xk.gjirafa.net/gjvideo-livestream/98r-d35-487-v6m/index.m3u8"
-            },
-
-            {
-                name: "TV ARTA",
-                logo: "https://i.imgur.com/MAhJkK9.png",
-                stream: ""
-            },
-
-            {
-                name: "TV DIELLI",
-                logo: "",
-                stream: ""
-            },
-
-            {
-                name: "TV OPOJA",
-                logo: "https://i.imgur.com/hxi4Qiq.png",
-                stream: ""
-            },
-
-            {
-                name: "TV SYRI",
-                logo: "https://i.imgur.com/ZQuFosn.png",
-                stream: ""
-            },
-
-            {
-                name: "ATV",
-                logo: "https://i.imgur.com/lX6sekx.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live/0nj-g63-92x-few/index.m3u8"
-            },
-
-            {
-                name: "A2 CNN",
-                logo: "https://i.imgur.com/TgO3Lzi.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live/2h7-5bc-xym-0k2/index.m3u8"
-            },
-
-            {
-                name: "TV NEWS",
-                logo: "",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live-n1/js0-h8f-ifx-29f/index.m3u8"
-            },
-
-            {
-                name: "ZICO TV",
-                logo: "",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live/j3a-n14-2pf-g3s/index.m3u8"
-            },
-
-            {
-                name: "RTK 3",
-                logo: "https://i.imgur.com/Ut9VcT3.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-livestream/rtk3/index.m3u8"
-            },
-
-            {
-                name: "RTK 4",
-                logo: "https://i.imgur.com/Urm4XDR.png",
-                stream:
-                    "https://gjvideo-live-xk.gjirafa.net/gjvideo-livestream/rtk4/index.m3u8"
-            },
-
-            {
-                name: "RTV BESA",
-                logo: "https://i.imgur.com/Qi3mz4Q.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live-n1/ehn-g2o-v7w-nh4/index.m3u8"
-            },
-
-            {
-                name: "TV PRIZRENI",
-                logo: "https://i.imgur.com/hvtJwOO.png",
-                stream:
-                    "https://gjirafa-video-live.gjirafa.net/gjvideo-live/5m0-cok-g5z-1xi/index.m3u8"
-            }
-
-        ];
+        return (
+            stream +
+            "#MANGO_NAME=" +
+            encodedName +
+            "&MANGO_LOGO=" +
+            encodedLogo
+        );
     }
 
 
     // ============================================================
-    // IPTV-ORG M3U DOWNLOADER
+    // EXTRACT CHANNEL METADATA
     // ============================================================
 
-    async getIptvOrgChannels() {
-
+    parseChannelUrl(url) {
         try {
 
-            const url =
-                "https://iptv-org.github.io/iptv/countries/xk.m3u";
+            const marker =
+                "#MANGO_NAME=";
 
-            const response =
-                await this.client.get(url);
+            const markerIndex =
+                url.indexOf(marker);
 
-            const text =
-                response.body || "";
+            // No metadata attached
+            if (markerIndex === -1) {
 
-            if (!text) {
-                return [];
+                return {
+                    name: "",
+                    logo: "",
+                    stream: url
+                };
             }
 
-            const lines =
-                text.split(/\r?\n/);
-
-            const channels = [];
-
-            let current = null;
-
-
-            for (const line of lines) {
-
-                const trimmed =
-                    line.trim();
-
-
-                // ------------------------------------------------
-                // Channel metadata
-                // ------------------------------------------------
-
-                if (
-                    trimmed.startsWith("#EXTINF:")
-                ) {
-
-                    const comma =
-                        trimmed.lastIndexOf(",");
-
-
-                    const name =
-                        comma !== -1
-                            ? trimmed
-                                .substring(comma + 1)
-                                .trim()
-                            : "";
-
-
-                    const idMatch =
-                        trimmed.match(
-                            /tvg-id=["']([^"']+)["']/i
-                        );
-
-
-                    const logoMatch =
-                        trimmed.match(
-                            /tvg-logo=["']([^"']+)["']/i
-                        );
-
-
-                    current = {
-
-                        name:
-                            name,
-
-                        id:
-                            idMatch
-                                ? idMatch[1]
-                                : "",
-
-                        logo:
-                            logoMatch
-                                ? logoMatch[1]
-                                : ""
-                    };
-
-                    continue;
-                }
-
-
-                // ------------------------------------------------
-                // Stream URL
-                // ------------------------------------------------
-
-                if (
-                    trimmed.startsWith("http") &&
-                    current
-                ) {
-
-                    channels.push({
-
-                        name:
-                            current.name,
-
-                        id:
-                            current.id,
-
-                        logo:
-                            current.logo,
-
-                        stream:
-                            trimmed
-                    });
-
-
-                    current = null;
-                }
-            }
-
-
-            return channels;
-
-
-        } catch (e) {
-
-            console.log(
-                "IPTV-org error: " + e
-            );
-
-            return [];
-        }
-    }
-
-
-    // ============================================================
-    // CHANNEL NAME NORMALIZATION
-    // ============================================================
-
-    normalizeName(name) {
-
-        return String(name || "")
-            .toLowerCase()
-            .replace(/[\/_-]/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-    }
-
-
-    // ============================================================
-    // CHANNEL MATCHING
-    // ============================================================
-
-    channelMatches(targetName, candidateName, candidateId) {
-
-        const target =
-            this.normalizeName(
-                targetName
-            );
-
-        const candidate =
-            this.normalizeName(
-                candidateName
-            );
-
-        const id =
-            this.normalizeName(
-                candidateId
-            );
-
-
-        // Exact match
-        if (
-            target === candidate
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // RTV 21
-        // --------------------------------------------------------
-
-        if (
-            target === "rtv 21" &&
-            (
-                candidate === "rtv21" ||
-                candidate === "rtv 21" ||
-                id.includes("rtv21")
-            )
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // KTV / Kohavision
-        // --------------------------------------------------------
-
-        if (
-            target.includes("kohavision") &&
-            (
-                candidate.includes("kohavision") ||
-                candidate === "ktv" ||
-                id.includes("kohavision")
-            )
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // RTK channels
-        // --------------------------------------------------------
-
-        if (
-            /^rtk [1-4]$/.test(target)
-        ) {
-
-            const number =
-                target.replace(
-                    "rtk ",
-                    ""
+            // Actual stream is everything before "#"
+            const stream =
+                url.substring(
+                    0,
+                    markerIndex
                 );
 
-            if (
-                candidate ===
-                "rtk " + number
-            ) {
-                return true;
-            }
+            // Metadata is everything after "#"
+            const metadata =
+                url.substring(
+                    markerIndex + 1
+                );
 
-            if (
-                id.includes(
-                    "rtk" + number
-                )
-            ) {
-                return true;
-            }
-        }
+            let name = "";
+            let logo = "";
 
-
-        // --------------------------------------------------------
-        // TV ARTA
-        // --------------------------------------------------------
-
-        if (
-            target === "tv arta" &&
-            (
-                candidate === "tv arta" ||
-                id.includes("tvarta")
-            )
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // TV OPOJA
-        // --------------------------------------------------------
-
-        if (
-            target === "tv opo ja" ||
-            target === "tv opoja"
-        ) {
-
-            if (
-                candidate.includes("opoja") ||
-                id.includes("tvo poja") ||
-                id.includes("tvopoja")
-            ) {
-                return true;
-            }
-        }
-
-
-        // --------------------------------------------------------
-        // TV SYRI
-        // --------------------------------------------------------
-
-        if (
-            target === "tv syri" &&
-            (
-                candidate === "tv syri" ||
-                candidate.includes("syri") ||
-                id.includes("tvsyri")
-            )
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // ATV
-        // --------------------------------------------------------
-
-        if (
-            target === "atv" &&
-            (
-                candidate === "atv" ||
-                id.includes("atv")
-            )
-        ) {
-            return true;
-        }
-
-
-        // --------------------------------------------------------
-        // A2 CNN
-        // --------------------------------------------------------
-
-        if (
-            target === "a2 cnn" &&
-            (
-                candidate.includes("a2 cnn") ||
-                candidate.includes("a2cnn") ||
-                id.includes("a2cnn")
-            )
-        ) {
-            return true;
-        }
-
-
-        return false;
-    }
-
-
-    // ============================================================
-    // GET CURRENT STREAM + CURRENT LOGO
-    // ============================================================
-
-    async resolveIptvOrgChannel(channelName) {
-
-        try {
-
-            const channels =
-                await this.getIptvOrgChannels();
-
+            const parts =
+                metadata.split("&");
 
             for (
-                const channel
-                of channels
+                const part of parts
             ) {
 
                 if (
-                    this.channelMatches(
-                        channelName,
-                        channel.name,
-                        channel.id
+                    part.startsWith(
+                        "MANGO_NAME="
                     )
                 ) {
 
-                    return {
+                    name =
+                        decodeURIComponent(
+                            part.substring(
+                                "MANGO_NAME=".length
+                            )
+                        );
+                }
 
-                        stream:
-                            channel.stream,
+                else if (
+                    part.startsWith(
+                        "MANGO_LOGO="
+                    )
+                ) {
 
-                        logo:
-                            channel.logo,
-
-                        name:
-                            channel.name,
-
-                        id:
-                            channel.id
-                    };
+                    logo =
+                        decodeURIComponent(
+                            part.substring(
+                                "MANGO_LOGO=".length
+                            )
+                        );
                 }
             }
 
-
-            return null;
-
+            return {
+                name: name,
+                logo: logo,
+                stream: stream
+            };
 
         } catch (e) {
 
             console.log(
-                "Channel resolution error: " +
+                "parseChannelUrl error: " +
                 e
             );
 
-            return null;
+            return {
+                name: "",
+                logo: "",
+                stream: url
+            };
         }
     }
 
 
     // ============================================================
-    // POPULAR
+    // WORKING KOSOVO CHANNELS
     // ============================================================
 
     async getPopular(page) {
@@ -529,75 +141,300 @@ class DefaultExtension extends MProvider {
 
             const list = [];
 
-            const staticChannels =
-                this.getChannelDatabase();
+            const client =
+                new Client();
 
 
-            // ----------------------------------------------------
-            // Get IPTV-org data once.
-            //
-            // This gives us current stream + logo information.
-            // ----------------------------------------------------
+            // ====================================================
+            // IPTV-ORG
+            // ====================================================
 
-            const iptvChannels =
-                await this.getIptvOrgChannels();
+            try {
 
+                const m3uUrl =
+                    "https://iptv-org.github.io/iptv/countries/xk.m3u";
 
-            // ----------------------------------------------------
-            // Add our selected channels.
-            // ----------------------------------------------------
+                const res =
+                    await client.get(
+                        m3uUrl
+                    );
 
-            for (
-                const channel
-                of staticChannels
-            ) {
+                const m3uText =
+                    res.body || "";
 
-                let finalLogo =
-                    channel.logo;
+                const lines =
+                    m3uText.split(
+                        /\r?\n/
+                    );
 
-                let finalStream =
-                    channel.stream;
+                let currentChannelName = "";
+                let currentLogoUrl = "";
 
-
-                // ------------------------------------------------
-                // Look for current IPTV-org information.
-                // ------------------------------------------------
 
                 for (
-                    const iptv
-                    of iptvChannels
+                    let i = 0;
+                    i < lines.length;
+                    i++
                 ) {
 
+                    const line =
+                        lines[i].trim();
+
+
+                    // --------------------------------------------
+                    // CHANNEL INFORMATION
+                    // --------------------------------------------
+
                     if (
-                        this.channelMatches(
-                            channel.name,
-                            iptv.name,
-                            iptv.id
+                        line.startsWith(
+                            "#EXTINF:"
                         )
                     ) {
 
-                        // Prefer IPTV-org's current logo
+                        const nameIndex =
+                            line.lastIndexOf(
+                                ","
+                            );
+
                         if (
-                            iptv.logo
+                            nameIndex !== -1
                         ) {
-                            finalLogo =
-                                iptv.logo;
+
+                            currentChannelName =
+                                line
+                                    .substring(
+                                        nameIndex + 1
+                                    )
+                                    .trim();
                         }
 
 
-                        // Prefer IPTV-org's current stream
-                        if (
-                            iptv.stream
-                        ) {
-                            finalStream =
-                                iptv.stream;
+                        const logoMatch =
+                            line.match(
+                                /tvg-logo=["']([^"']+)["']/i
+                            ) ||
+                            line.match(
+                                /logo=["']([^"']+)["']/i
+                            );
+
+
+                        currentLogoUrl =
+                            logoMatch
+                                ? logoMatch[1]
+                                : "";
+                    }
+
+
+                    // --------------------------------------------
+                    // STREAM URL
+                    // --------------------------------------------
+
+                    else if (
+                        line.startsWith("http") &&
+                        currentChannelName !== ""
+                    ) {
+
+                        const lowerName =
+                            currentChannelName
+                                .toLowerCase();
+
+
+                        const allowed =
+                            lowerName.includes(
+                                "arta"
+                            ) ||
+                            lowerName.includes(
+                                "dielli"
+                            ) ||
+                            lowerName.includes(
+                                "opoja"
+                            ) ||
+                            lowerName.includes(
+                                "syri"
+                            );
+
+
+                        if (allowed) {
+
+                            list.push({
+
+                                name:
+                                    currentChannelName,
+
+                                imageUrl:
+                                    currentLogoUrl,
+
+                                link:
+                                    this.createChannelUrl(
+                                        currentChannelName,
+                                        currentLogoUrl,
+                                        line
+                                    )
+                            });
                         }
 
 
-                        break;
+                        currentChannelName = "";
+                        currentLogoUrl = "";
                     }
                 }
 
+            } catch (iptvErr) {
+
+                console.log(
+                    "IPTV-org source failed: " +
+                    iptvErr
+                );
+            }
+
+
+            // ====================================================
+            // GJIRAFA CHANNELS
+            // ====================================================
+
+            const gjirafaFeeds = [
+
+                {
+                    name:
+                        "RTV 21",
+
+                    logo:
+                        "https://i.imgur.com/AqQltGh.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live/2cz-npl-jfn-9he/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "KTV / Kohavision",
+
+                    logo:
+                        "https://i.imgur.com/LOi9yma.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-livestream/lj9-pxm-o53-rp0/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "RTK 1",
+
+                    logo:
+                        "https://i.imgur.com/KTcWcO6.png",
+
+                    stream:
+                        "https://gjvideo-live-xk.gjirafa.net/gjvideo-livestream/98r-d35-487-v6m/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "ATV",
+
+                    logo:
+                        "https://i.imgur.com/lX6sekx.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live/0nj-g63-92x-few/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "A2 CNN",
+
+                    logo:
+                        "https://i.imgur.com/TgO3Lzi.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live/2h7-5bc-xym-0k2/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "TV NEWS",
+
+                    logo:
+                        "https://i.imgur.com/your-tv-news-logo.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live-n1/js0-h8f-ifx-29f/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "ZICO TV",
+
+                    logo:
+                        "https://i.imgur.com/your-zico-logo.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live/j3a-n14-2pf-g3s/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "RTK 3",
+
+                    logo:
+                        "https://i.imgur.com/Ut9VcT3.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-livestream/rtk3/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "RTK 4",
+
+                    logo:
+                        "https://i.imgur.com/Urm4XDR.png",
+
+                    stream:
+                        "https://gjvideo-live-xk.gjirafa.net/gjvideo-livestream/rtk4/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "RTV BESA",
+
+                    logo:
+                        "https://i.imgur.com/Qi3mz4Q.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live-n1/ehn-g2o-v7w-nh4/index.m3u8"
+                },
+
+
+                {
+                    name:
+                        "TV PRIZRENI",
+
+                    logo:
+                        "https://i.imgur.com/hvtJwOO.png",
+
+                    stream:
+                        "https://gjirafa-video-live.gjirafa.net/gjvideo-live/5m0-cok-g5z-1xi/index.m3u8"
+                }
+
+            ];
+
+
+            // ====================================================
+            // ADD GJIRAFA CHANNELS
+            // ====================================================
+
+            for (
+                const channel of gjirafaFeeds
+            ) {
 
                 list.push({
 
@@ -605,82 +442,21 @@ class DefaultExtension extends MProvider {
                         channel.name,
 
                     imageUrl:
-                        finalLogo,
+                        channel.logo,
 
                     link:
-                        finalStream
+                        this.createChannelUrl(
+                            channel.name,
+                            channel.logo,
+                            channel.stream
+                        )
                 });
             }
 
 
-            // ----------------------------------------------------
-            // Add additional IPTV-org Kosovo channels.
-            //
-            // Only these four are automatically imported.
-            // ----------------------------------------------------
-
-            const automaticNames = [
-
-                "TV Arta",
-                "TV Dielli",
-                "TV Opoja",
-                "TV Syri"
-
-            ];
-
-
-            for (
-                const iptv
-                of iptvChannels
-            ) {
-
-                const allowed =
-                    automaticNames.some(
-                        name =>
-                            this.channelMatches(
-                                name,
-                                iptv.name,
-                                iptv.id
-                            )
-                    );
-
-
-                if (!allowed) {
-                    continue;
-                }
-
-
-                const alreadyExists =
-                    list.some(
-                        item =>
-                            this.channelMatches(
-                                item.name,
-                                iptv.name,
-                                iptv.id
-                            )
-                    );
-
-
-                if (!alreadyExists) {
-
-                    list.push({
-
-                        name:
-                            iptv.name,
-
-                        imageUrl:
-                            iptv.logo,
-
-                        link:
-                            iptv.stream
-                    });
-                }
-            }
-
-
-            // ----------------------------------------------------
-            // Remove duplicates
-            // ----------------------------------------------------
+            // ====================================================
+            // REMOVE DUPLICATES
+            // ====================================================
 
             const unique = [];
 
@@ -689,14 +465,13 @@ class DefaultExtension extends MProvider {
 
 
             for (
-                const channel
-                of list
+                const channel of list
             ) {
 
                 const key =
-                    this.normalizeName(
-                        channel.name
-                    );
+                    channel.name
+                        .toLowerCase()
+                        .trim();
 
 
                 if (
@@ -729,7 +504,6 @@ class DefaultExtension extends MProvider {
                 e
             );
 
-
             return {
 
                 list: [],
@@ -742,7 +516,7 @@ class DefaultExtension extends MProvider {
 
 
     // ============================================================
-    // LATEST
+    // LATEST UPDATES
     // ============================================================
 
     async getLatestUpdates(page) {
@@ -771,18 +545,14 @@ class DefaultExtension extends MProvider {
                 );
 
 
-            const q =
-                this.normalizeName(
-                    query
-                );
-
-
             const filtered =
                 catalog.list.filter(
                     channel =>
-                        this.normalizeName(
-                            channel.name
-                        ).includes(q)
+                        channel.name
+                            .toLowerCase()
+                            .includes(
+                                query.toLowerCase()
+                            )
                 );
 
 
@@ -803,7 +573,6 @@ class DefaultExtension extends MProvider {
                 e
             );
 
-
             return {
 
                 list: [],
@@ -819,150 +588,54 @@ class DefaultExtension extends MProvider {
     // CHANNEL DETAILS
     //
     // IMPORTANT:
-    // The actual channel name and logo are preserved.
-    //
-    // We NEVER use "Kosovo Live TV" here.
+    // Recover the REAL channel name and REAL channel logo.
     // ============================================================
 
     async getDetail(url) {
 
         try {
 
-            const staticChannels =
-                this.getChannelDatabase();
-
-
-            let channel =
-                staticChannels.find(
-                    item =>
-                        item.stream === url
+            const channel =
+                this.parseChannelUrl(
+                    url
                 );
 
 
-            // ----------------------------------------------------
-            // If not found by static URL, check IPTV-org.
-            // ----------------------------------------------------
-
-            if (!channel) {
-
-                const iptvChannels =
-                    await this.getIptvOrgChannels();
+            const channelName =
+                channel.name ||
+                "Live TV";
 
 
-                const found =
-                    iptvChannels.find(
-                        item =>
-                            item.stream === url
-                    );
+            const channelLogo =
+                channel.logo ||
+                "";
 
 
-                if (found) {
+            const streamUrl =
+                channel.stream;
 
-                    return {
-
-                        name:
-                            found.name,
-
-                        description:
-                            "Live Kosovo television.",
-
-                        imageUrl:
-                            found.logo,
-
-                        episodes: [
-
-                            {
-
-                                name:
-                                    "Shiko Live",
-
-                                url:
-                                    url
-                            }
-
-                        ]
-                    };
-                }
-            }
-
-
-            if (channel) {
-
-                // ------------------------------------------------
-                // Get latest metadata from IPTV-org.
-                // ------------------------------------------------
-
-                const current =
-                    await this.resolveIptvOrgChannel(
-                        channel.name
-                    );
-
-
-                let logo =
-                    channel.logo;
-
-
-                if (
-                    current &&
-                    current.logo
-                ) {
-
-                    logo =
-                        current.logo;
-                }
-
-
-                return {
-
-                    name:
-                        channel.name,
-
-                    description:
-                        "Live Kosovo television.",
-
-                    imageUrl:
-                        logo,
-
-                    episodes: [
-
-                        {
-
-                            name:
-                                "Shiko Live",
-
-                            url:
-                                url
-                        }
-
-                    ]
-                };
-            }
-
-
-            // ----------------------------------------------------
-            // Last fallback.
-            // ----------------------------------------------------
 
             return {
 
                 name:
-                    "Kosovo TV",
+                    channelName,
 
                 description:
-                    "Live Kosovo television.",
+                    "Live Kosovo television channel.",
 
                 imageUrl:
-                    "",
+                    channelLogo,
 
                 episodes: [
 
                     {
 
                         name:
-                            "Shiko Live",
+                            "Shiko " +
+                            channelName,
 
                         url:
-                            url
+                            streamUrl
                     }
 
                 ]
@@ -980,10 +653,10 @@ class DefaultExtension extends MProvider {
             return {
 
                 name:
-                    "Kosovo TV",
+                    "Live TV",
 
                 description:
-                    "Live Kosovo television.",
+                    "",
 
                 imageUrl:
                     "",
@@ -993,7 +666,7 @@ class DefaultExtension extends MProvider {
                     {
 
                         name:
-                            "Shiko Live",
+                            "Luaj",
 
                         url:
                             url
@@ -1008,186 +681,25 @@ class DefaultExtension extends MProvider {
     // ============================================================
     // VIDEO PLAYER
     //
-    // Whenever possible:
-    //
-    // Channel
-    //    ↓
-    // IPTV-org
-    //    ↓
-    // CURRENT stream
-    //
-    // Otherwise:
-    //
-    // Channel
-    //    ↓
-    // Existing Gjirafa fallback
+    // Mangayomi receives ONLY the real stream URL here.
     // ============================================================
 
     async getVideoList(url) {
 
         try {
 
-            let channelName =
-                "";
+            // If Mangayomi somehow passes the catalog URL
+            // directly to getVideoList, strip the metadata.
+
+            const channel =
+                this.parseChannelUrl(
+                    url
+                );
 
 
-            // ----------------------------------------------------
-            // Identify channel from existing fallback URL.
-            // ----------------------------------------------------
-
-            if (
-                url.includes(
-                    "2cz-npl-jfn-9he"
-                )
-            ) {
-
-                channelName =
-                    "RTV 21";
-
-            } else if (
-                url.includes(
-                    "lj9-pxm-o53-rp0"
-                )
-            ) {
-
-                channelName =
-                    "KTV / Kohavision";
-
-            } else if (
-                url.includes(
-                    "98r-d35-487-v6m"
-                )
-            ) {
-
-                channelName =
-                    "RTK 1";
-
-            } else if (
-                url.includes(
-                    "0nj-g63-92x-few"
-                )
-            ) {
-
-                channelName =
-                    "ATV";
-
-            } else if (
-                url.includes(
-                    "2h7-5bc-xym-0k2"
-                )
-            ) {
-
-                channelName =
-                    "A2 CNN";
-
-            } else if (
-                url.includes(
-                    "js0-h8f-ifx-29f"
-                )
-            ) {
-
-                channelName =
-                    "TV NEWS";
-
-            } else if (
-                url.includes(
-                    "j3a-n14-2pf-g3s"
-                )
-            ) {
-
-                channelName =
-                    "ZICO TV";
-
-            } else if (
-                url.includes(
-                    "/rtk3/"
-                )
-            ) {
-
-                channelName =
-                    "RTK 3";
-
-            } else if (
-                url.includes(
-                    "/rtk4/"
-                )
-            ) {
-
-                channelName =
-                    "RTK 4";
-
-            } else if (
-                url.includes(
-                    "ehn-g2o-v7w-nh4"
-                )
-            ) {
-
-                channelName =
-                    "RTV BESA";
-
-            } else if (
-                url.includes(
-                    "5m0-cok-g5z-1xi"
-                )
-            ) {
-
-                channelName =
-                    "TV PRIZRENI";
-            }
-
-
-            // ----------------------------------------------------
-            // Dynamic resolution
-            // ----------------------------------------------------
-
-            if (
-                channelName !== ""
-            ) {
-
-                const current =
-                    await this.resolveIptvOrgChannel(
-                        channelName
-                    );
-
-
-                if (
-                    current &&
-                    current.stream
-                ) {
-
-                    console.log(
-                        "Using dynamic stream for " +
-                        channelName
-                    );
-
-
-                    return [
-
-                        {
-
-                            url:
-                                current.stream,
-
-                            originalUrl:
-                                current.stream,
-
-                            quality:
-                                "Live - IPTV-org Dynamic"
-                        }
-
-                    ];
-                }
-            }
-
-
-            // ----------------------------------------------------
-            // Fallback to existing URL.
-            // ----------------------------------------------------
-
-            console.log(
-                "Using fallback stream: " +
-                url
-            );
+            const streamUrl =
+                channel.stream ||
+                url;
 
 
             return [
@@ -1195,13 +707,13 @@ class DefaultExtension extends MProvider {
                 {
 
                     url:
-                        url,
+                        streamUrl,
 
                     originalUrl:
-                        url,
+                        streamUrl,
 
                     quality:
-                        "Live - Gjirafa Fallback"
+                        "Live"
                 }
 
             ];
@@ -1214,22 +726,7 @@ class DefaultExtension extends MProvider {
                 e
             );
 
-
-            return [
-
-                {
-
-                    url:
-                        url,
-
-                    originalUrl:
-                        url,
-
-                    quality:
-                        "Live - Fallback"
-                }
-
-            ];
+            return [];
         }
     }
 }
