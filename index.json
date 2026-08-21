@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Kosovo TV",
+    "id": 100000001,
+    "baseUrl": "https://github.com/qyshdush018-lgtm/kosovo-tv-mangayomi",
+    "lang": "sq",
+    "isManga": false,
+    "iconUrl": "https://raw.githubusercontent.com/qyshdush018-lgtm/kosovo-tv-mangayomi/main/images/kosovo_tv.png",
+    "version": 1,
+    "sourceCodeUrl": "https://raw.githubusercontent.com/qyshdush018-lgtm/kosovo-tv-mangayomi/main/javascript/kosovo_tv/KosovoTV.js"
+  }
+]
